@@ -1,0 +1,18 @@
+# Môi trường Python
+.venv/
+__pycache__/
+*.pyc
+
+# Kết quả đo và file tạm (sinh lại được bằng test_camera.py)
+*.json
+*.bak
+
+# Ảnh test (dữ liệu lớn, không đưa lên repo)
+*.jpeg
+*.jpg
+*.png
+*.tif
+*.tiff
+
+# Script cá nhân không thuộc dự án
+claude_share_to_markdown.py
