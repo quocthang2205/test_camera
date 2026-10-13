@@ -16,3 +16,5 @@ __pycache__/
 
 # Script cá nhân không thuộc dự án
 claude_share_to_markdown.py
+# ...trừ 5 ảnh mẫu (ảnh tối 4K) dùng để chạy thử
+!Test_*.jpeg
