@@ -1,0 +1,26 @@
+# Build bản chạy cho Linux, macOS, Windows. Chạy tay (Actions > Run workflow) hoặc khi gắn tag v*.
+name: build-app
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {os: ubuntu-22.04, artifact: camera-checker-linux}
+          - {os: macos-latest, artifact: camera-checker-macos}
+          - {os: windows-latest, artifact: camera-checker-windows}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -r requirements-build.txt
+      - run: python scripts/build_app.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/*

@@ -62,6 +62,9 @@ Luôn đặt pattern ảnh trong ngoặc kép.
 .venv/bin/python -m camera_checker compare hot_lan1.json hot_lan2.json
 ```
 
+Báo cáo hot/dead (PDF và web) hiện đủ **từng ảnh đã phân tích** (5 hoặc 10): mỗi ảnh đánh dấu điểm bị flag riêng ảnh đó
+(vòng đỏ = lỗi thật, vòng cam/đứt nét = nhiễu bị loại), kèm bảng tổng hợp theo ảnh (bị flag / lỗi thật / nhiễu loại).
+
 Về số ảnh: pixel chỉ bị tính là lỗi khi lỗi ở **tất cả** ảnh được phân tích. Dùng 5 ảnh sẽ lọc được nhiễu
 ngẫu nhiên; dùng 10 ảnh cho kết quả kỹ nhất; dùng 1–4 ảnh thì chương trình in WARNING, chỉ nên dùng để kiểm nhanh, kết luận cuối cần 5 ảnh.
 
@@ -144,3 +147,17 @@ Camera GREMSY INFISIGHT không ghi ISO vào EXIF, nên cần nhập `--iso` tay.
 - `zone`: `A` = vùng giữa (mặc định 1/2 khung hình ở giữa, chỉnh bằng `--zone-a-pct`), `B` = vùng rìa.
 - `kind`: `single` = 1 px, `cluster` = cụm, `line` = đường mảnh dài ≥ 10 px.
 - File kết quả kiểu cũ (chỉ có danh sách điểm lỗi) vẫn dùng được với `compare`.
+
+## Đóng gói thành app (Linux / macOS / Windows)
+
+PyInstaller không build chéo hệ điều hành: mỗi hệ điều hành build trên chính nó.
+
+```bash
+pip install -r requirements-build.txt
+python scripts/build_app.py          # ra dist/camera-checker (Windows: dist\camera-checker.exe), ~120 MB, 1 file
+./dist/camera-checker                # mở trình duyệt tại http://127.0.0.1:8000 (--port, --lan, --no-browser như web_app)
+```
+
+Muốn có đủ 3 bản mà không cần 3 máy: đẩy repo lên GitHub, vào Actions > **build-app** > Run workflow
+(hoặc gắn tag `v*`); tải 3 file ở mục Artifacts. Font PDF có dấu đã đóng gói sẵn trong `camera_checker/fonts/`.
+Lưu ý: app chưa ký số, macOS cần chuột phải > Open lần đầu; Windows SmartScreen có thể cảnh báo (More info > Run anyway).

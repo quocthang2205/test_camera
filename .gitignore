@@ -20,3 +20,8 @@ __pycache__/
 scripts/claude_share_to_markdown.py
 # ...trừ 5 ảnh mẫu (ảnh tối 4K) dùng để chạy thử
 !samples/Test_*.jpeg
+
+# Bản đóng gói
+build/
+dist/
+*.spec

@@ -1,4 +1,5 @@
-"""Sinh báo cáo PDF cho một lần kiểm tra: điều kiện chụp, tổng hợp, ảnh đánh dấu vị trí lỗi, thông số, danh sách điểm.
+"""Sinh báo cáo PDF cho một lần kiểm tra: điều kiện chụp, tổng hợp (kèm bảng theo từng ảnh), thông số, ảnh đánh dấu vị trí lỗi,
+lưới từng ảnh phân tích, danh sách điểm.
 Dùng chung cho dòng lệnh (core.py) và web (web_app.py). Cần font TTF có dấu tiếng Việt (DejaVu / Noto / Arial).
 """
 from datetime import datetime
@@ -22,8 +23,10 @@ INFO_ROWS = [("camera", "Camera"), ("serial", "Số serial"), ("firmware", "Firm
              ("temperature", "Nhiệt độ môi trường"), ("tester", "Người test"), ("note", "Ghi chú")]
 MAX_ROWS = 300            # danh sách điểm lỗi trong PDF; đầy đủ nằm ở file .json / .csv
 IMAGE_MAX_W = 1600        # ảnh đánh dấu thu nhỏ cho PDF nhẹ
-# (thường, đậm): Linux DejaVu / Noto, Windows Arial, macOS Arial
+# (thường, đậm): font DejaVu đóng gói sẵn (chạy giống nhau trên mọi máy / bản build), rồi font hệ thống
+BUNDLED_FONT_DIR = Path(__file__).parent / "fonts"
 FONT_CANDIDATES = [
+    (str(BUNDLED_FONT_DIR / "DejaVuSans.ttf"), str(BUNDLED_FONT_DIR / "DejaVuSans-Bold.ttf")),
     ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
     ("/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf", "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"),
     ("C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf"),
@@ -36,19 +39,19 @@ def _hex(c):
     return tuple(int(c[i:i + 2], 16) for i in (1, 3, 5))
 
 
-def mark_image(img, size, results, zone):
+def mark_image(img, size, results, zone, max_w=IMAGE_MAX_W, radius=14, thick=3):
     """Thu nhỏ ảnh, vẽ khung vùng A và vòng tròn quanh từng điểm lỗi. size = (W, H) ảnh gốc
     (ảnh truyền vào có thể đã thu nhỏ sẵn, như ảnh preview của web). Trả về bytes JPEG."""
     img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR) if img.ndim == 2 else img.copy()
-    if img.shape[1] > IMAGE_MAX_W:
-        img = cv2.resize(img, (IMAGE_MAX_W, round(img.shape[0] * IMAGE_MAX_W / img.shape[1])), interpolation=cv2.INTER_AREA)
+    if img.shape[1] > max_w:
+        img = cv2.resize(img, (max_w, round(img.shape[0] * max_w / img.shape[1])), interpolation=cv2.INTER_AREA)
     s = img.shape[1] / size[0]
     x0, y0, x1, y1 = (round(v * s) for v in zone)
     cv2.rectangle(img, (x0, y0), (x1, y1), (200, 200, 200), 2)
     for i, (_, defects) in enumerate(results):
         r, g, b = _hex(PALETTE[i % len(PALETTE)])
         for d in defects:
-            cv2.circle(img, (round(d["x"] * s), round(d["y"] * s)), 14, (b, g, r), 3)
+            cv2.circle(img, (round(d["x"] * s), round(d["y"] * s)), radius, (b, g, r), thick)
     return cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes()
 
 
@@ -91,8 +94,50 @@ def _table(pdf, header, rows, widths, align=None):
                 r.cell(str(cell))
 
 
-def build_pdf(mode, info, used_params, notes, results, image, size, zone):
+def _frames_table(pdf, frames):
+    """Bảng tổng hợp theo ảnh: bao nhiêu điểm bị flag, bao nhiêu là lỗi thật, bao nhiêu là nhiễu bị loại."""
+    _table(pdf, ("Ảnh", "Tên file", "Bị flag", "Lỗi thật", "Nhiễu loại"),
+           [(i + 1, f["name"], f["total"], f["confirmed"], f["total"] - f["confirmed"]) for i, f in enumerate(frames)],
+           (16, 84, 26, 26, 28))
+
+
+def _frames_grid(pdf, frames, size, zone):
+    """Mọi ảnh phân tích (5 hoặc 10) xếp 2 cột, mỗi ảnh đánh dấu điểm lỗi riêng của ảnh đó:
+    vòng đỏ = lỗi thật (có ở các ảnh đủ ngưỡng), vòng cam = nhiễu chỉ bị flag ở ảnh này nên bị loại."""
+    gap = 4
+    w = (pdf.epw - gap) / 2
+    h = w * frames[0]["image"].shape[0] / frames[0]["image"].shape[1]
+    cap = 5.5
+    for i, f in enumerate(frames):
+        if i % 2 == 0:
+            if pdf.get_y() + cap + h > pdf.h - pdf.b_margin:
+                pdf.add_page()
+            row_y = pdf.get_y()
+        x = pdf.l_margin + (i % 2) * (w + gap)
+        real = [d for d in f["defects"] if d["confirmed"]]
+        noise = [d for d in f["defects"] if not d["confirmed"]]
+        jpg = mark_image(f["image"], size, [("thật", real), ("nhiễu", noise)], zone, max_w=1000, radius=24, thick=4)
+        pdf.set_xy(x, row_y)
+        pdf.set_font("main", "B", 8.5)
+        pdf.cell(w, cap, f"Ảnh {i + 1}/{len(frames)}: {f['name']}", new_x="LEFT", new_y="TOP")
+        pdf.set_font("main", size=8.5)
+        pdf.set_text_color(*MUTED)
+        pdf.set_xy(x, row_y)
+        pdf.cell(w, cap, f"{f['total']} điểm · {f['confirmed']} thật", align="R")
+        pdf.set_text_color(*INK)
+        pdf.image(BytesIO(jpg), x=x, y=row_y + cap, w=w)
+        if i % 2 == 1 or i == len(frames) - 1:
+            pdf.set_y(row_y + cap + h + 3)
+    pdf.set_font("main", size=8.5)
+    pdf.set_text_color(*MUTED)
+    pdf.multi_cell(0, 4.5, "Vòng đỏ: lỗi thật (đủ số ảnh theo ngưỡng). Vòng cam: nhiễu chỉ xuất hiện ở ảnh này, đã bị loại. "
+                           "Khung xám: vùng giữa A.", new_x="LMARGIN", new_y="NEXT")
+    pdf.set_text_color(*INK)
+
+
+def build_pdf(mode, info, used_params, notes, results, image, size, zone, frames=None):
     """results: [(tên, [defect, ...]), ...] đúng thứ tự màu. image: ảnh đầu tiên của bộ thứ nhất (BGR/xám).
+    frames: [dict(name, image, total, confirmed, defects)] từng ảnh đã phân tích (hot/dead), None = bỏ qua.
     used_params: dict thông số đã dùng. Trả về bytes PDF."""
     pdf = _Report(format="A4")
     _font(pdf)
@@ -130,6 +175,9 @@ def build_pdf(mode, info, used_params, notes, results, image, size, zone):
            [(title(n), len(ds), *(sum(d[k] == v for d in ds) for k, v in
              (("zone", "A"), ("kind", "single"), ("kind", "cluster"), ("kind", "line")))) for n, ds in results],
            (60, 24, 24, 24, 24, 24))
+    if frames:
+        pdf.ln(3)
+        _frames_table(pdf, frames)
     for note in notes:
         warn = note.startswith(("WARNING", "NOTE"))
         pdf.set_text_color(*((180, 110, 0) if warn else MUTED))
@@ -163,7 +211,12 @@ def build_pdf(mode, info, used_params, notes, results, image, size, zone):
                            "Khung xám: vùng giữa A.", new_x="LMARGIN", new_y="NEXT")
     pdf.set_text_color(*INK)
 
-    _heading(pdf, "5. Danh sách điểm lỗi")
+    if frames:
+        pdf.add_page()
+        _heading(pdf, f"5. Từng ảnh đã phân tích ({len(frames)} ảnh)")
+        _frames_grid(pdf, frames, size, zone)
+
+    _heading(pdf, f"{6 if frames else 5}. Danh sách điểm lỗi")
     flat = [(title(n), d) for n, ds in results for d in ds]
     if not flat:
         pdf.cell(0, 6, "Không có điểm lỗi nào.", new_x="LMARGIN", new_y="NEXT")

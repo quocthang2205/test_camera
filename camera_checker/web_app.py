@@ -17,6 +17,7 @@ from . import pdf_report
 from . import core
 
 WEB_DIR = Path(__file__).parent / "web"
+FRAME_PREVIEW_W = 960           # ảnh từng frame nhỏ hơn để tổng dung lượng kết quả (5-10 ảnh) vẫn nhẹ
 PREVIEW_MAX_W = 1600            # ảnh nền thu nhỏ cho nhẹ trình duyệt; điểm lỗi do trình duyệt vẽ đè (SVG)
 PALETTE = pdf_report.PALETTE
 
@@ -25,13 +26,24 @@ app.config["MAX_CONTENT_LENGTH"] = 2 * 1024**3   # 2 GB: nhiều bộ ảnh 4K
 app.json.sort_keys = False                        # giữ thứ tự tab hot/dead/stuck/ir
 
 
-def render_preview(img):
-    """Ảnh đầu tiên thu nhỏ (chưa đánh dấu) dạng data URL JPEG."""
+def render_preview(img, max_w=PREVIEW_MAX_W, quality=85):
+    """Ảnh thu nhỏ (chưa đánh dấu) dạng data URL JPEG."""
     H, W = img.shape[:2]
-    if W > PREVIEW_MAX_W:
-        img = cv2.resize(img, (PREVIEW_MAX_W, round(H * PREVIEW_MAX_W / W)), interpolation=cv2.INTER_AREA)
-    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
+    if W > max_w:
+        img = cv2.resize(img, (max_w, round(H * max_w / W)), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, quality])
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode() if ok else None
+
+
+def decode_preview(data_url):
+    """Ngược lại của render_preview: data URL -> ảnh BGR. Lỗi định dạng -> ValueError."""
+    head, b64 = str(data_url).split(",", 1)
+    if not head.startswith("data:image/"):
+        raise ValueError
+    img = cv2.imdecode(np.frombuffer(base64.b64decode(b64), np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError
+    return img
 
 
 @app.get("/")
@@ -58,13 +70,14 @@ def analyze(mode):
     if cfg is None:
         return jsonify(error=f"chế độ không hợp lệ: {mode}"), 400
     try:
-        stacks, first_blob = [], None
+        stacks, first_blob, names0 = [], None, []
         for slot in cfg["slots"]:
             files = request.files.getlist(slot)
             if len(files) < cfg["min"]:
                 core.die(f"bộ '{slot}' có {len(files)} ảnh, cần ít nhất {cfg['min']}")
             blobs = [f.read() for f in files]
             first_blob = first_blob or blobs[0]
+            names0 = names0 or [f.filename for f in files]
             stacks.append(core.decode_images(blobs, [f.filename for f in files], cfg["gray"]))
         if cfg.get("frames"):
             frames = request.form.get("frames", str(core.MIN_FRAMES)).strip()
@@ -73,7 +86,8 @@ def analyze(mode):
             stacks = [core.pick_frames(s, int(frames)) for s in stacks]
         manual = capture_info.clean_manual(request.form)
         p = params.parse({s["key"]: request.form.get("p_" + s["key"]) for s in params.SPEC})
-        results, notes = core.analyze(mode, stacks, p)
+        frame_log = []
+        results, notes = core.analyze(mode, stacks, p, frame_log)
     except ValueError as e:   # PixelCheckError / ParamError / trường nhập tay sai kiểu
         return jsonify(error=str(e)), 400
     info = capture_info.build_info(first_blob, stacks[0].shape[1:], len(stacks[0]), manual)
@@ -90,6 +104,8 @@ def analyze(mode):
         results=[dict(name=name, color=PALETTE[i % len(PALETTE)], summary=core.summarize(defects), defects=defects)
                  for i, (name, defects) in enumerate(results.items())],
         preview=render_preview(stacks[0][0]),
+        frames=[dict(name=names0[i], preview=render_preview(stacks[0][i], FRAME_PREVIEW_W, 75), **log)
+                for i, log in enumerate(frame_log)],
     )
 
 
@@ -99,17 +115,14 @@ def report():
     Không lưu ảnh trên server: ảnh đánh dấu vẽ lại từ ảnh preview có sẵn trong kết quả."""
     data = request.get_json(silent=True) or {}
     try:
-        head, b64 = str(data.get("preview", "")).split(",", 1)
-        if not head.startswith("data:image/"):
-            raise ValueError
-        img = cv2.imdecode(np.frombuffer(base64.b64decode(b64), np.uint8), cv2.IMREAD_COLOR)
-        if img is None:
-            raise ValueError
+        img = decode_preview(data.get("preview", ""))
+        frames = [dict(name=str(f["name"]), image=decode_preview(f["preview"]), total=int(f["total"]),
+                       confirmed=int(f["confirmed"]), defects=list(f["defects"])) for f in data.get("frames", [])]
         size = (int(data["size"]["width"]), int(data["size"]["height"]))
         results = [(str(r["name"]), list(r["defects"])) for r in data["results"]]
         pdf = pdf_report.build_pdf(str(data["mode"]), dict(data["info"]), dict(data["params"]),
                                    [str(n) for n in data.get("notes", [])], results, img, size,
-                                   [float(v) for v in data["zone"]])
+                                   [float(v) for v in data["zone"]], frames)
     except (KeyError, TypeError, ValueError):
         return jsonify(error="dữ liệu kết quả không hợp lệ, hãy phân tích lại"), 400
     except RuntimeError as e:   # thiếu font

@@ -135,3 +135,10 @@ select.small { padding:4px 8px; border:1px solid var(--line); border-radius:8px;
 .drop-veil div { background:var(--card); border:2px dashed var(--accent); border-radius:16px; padding:28px 36px; font-size:17px; font-weight:600; }
 .btn.primary-soft { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
 .btn:disabled { opacity:.6; cursor:wait; }
+
+/* Lưới từng ảnh phân tích */
+.frames-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; margin-top:12px; }
+.fcard { margin:0; }
+.fcard figcaption { font-size:12.5px; color:var(--muted); margin-top:6px; }
+.fcard circle { fill:transparent; stroke-width:2; vector-effect:non-scaling-stroke; }
+.fcard circle.noise { stroke-dasharray:4 3; }

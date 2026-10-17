@@ -44,7 +44,7 @@ export function renderResults(out, data, firstFile) {
       <p class="notes">${notes.map(esc).join(" · ")}</p>
     </section>
     <section class="panel">
-      <h2>Vị trí điểm lỗi</h2>
+      <h2>Vị trí điểm lỗi (tổng hợp)</h2>
       <div class="toolbar" style="margin:0 0 10px">${data.results.map((r, i) => `
         <label class="chip" style="--c:${r.color}"><input type="checkbox" data-layer="${i}" checked>
           <span class="dot"></span>${esc(title(r))} (${r.defects.length})</label>`).join("")}
@@ -64,10 +64,12 @@ export function renderResults(out, data, firstFile) {
         <span class="stats" data-count></span>
       </div>
       <div class="tbl"><table><thead><tr><th>#</th><th>Kết quả</th><th>x</th><th>y</th><th>Vùng</th><th>Loại</th><th>Số px</th></tr></thead><tbody></tbody></table></div>
-    </section>`;
+    </section>
+    ${framesPanel(data)}`;   // sau panel chính: q("tbody"), q("svg") bên dưới phải khớp panel chính trước
 
   const q = (s) => out.querySelector(s);
   q(".stage img").src = data.preview;
+  drawFrameMarks(out, data);
   const all = data.results.flatMap((r, ri) => r.defects.map((d, di) => ({ ...d, ri, di })));
   const svg = q("svg"), [zx0, zy0, zx1, zy1] = data.zone, rad = Math.max(6, data.size.width * 0.012);
   svg.innerHTML = `<rect data-zone x="${zx0}" y="${zy0}" width="${zx1 - zx0}" height="${zy1 - zy0}" fill="none" stroke="#ddd"
@@ -135,6 +137,29 @@ export function renderResults(out, data, firstFile) {
     const r = data.results[Number(k)];
     download(`${r.name}.json`, JSON.stringify(one(r), null, 1));
   }));
+}
+
+// Từng ảnh đã phân tích (hot/dead): mỗi ảnh một thẻ có đánh dấu điểm bị flag riêng ảnh đó
+function framesPanel(data) {
+  const fr = data.frames || [];
+  if (!fr.length) return "";
+  return `<section class="panel">
+    <h2>Từng ảnh đã phân tích · ${fr.length} ảnh</h2>
+    <div class="tbl"><table><thead><tr><th>Ảnh</th><th>Tên file</th><th>Bị flag</th><th>Lỗi thật</th><th>Nhiễu loại</th></tr></thead><tbody>${fr.map((f, i) =>
+      `<tr><td>${i + 1}</td><td>${esc(f.name)}</td><td>${f.total}</td><td>${f.confirmed}</td><td>${f.total - f.confirmed}</td></tr>`).join("")}</tbody></table></div>
+    <div class="frames-grid">${fr.map((f, i) => `
+      <figure class="fcard"><div class="stage"><img alt="${esc(f.name)}" src="${f.preview}"><svg data-frame="${i}" viewBox="0 0 ${data.size.width} ${data.size.height}" preserveAspectRatio="none"></svg></div>
+        <figcaption><b>Ảnh ${i + 1}</b> · ${esc(f.name)}<br>${f.total} điểm · ${f.confirmed} lỗi thật${f.total > f.confirmed ? ` · ${f.total - f.confirmed} nhiễu` : ""}</figcaption></figure>`).join("")}</div>
+    <p class="cap">Vòng màu đặc: lỗi thật (có ở đủ số ảnh theo ngưỡng). Vòng đứt nét: nhiễu chỉ bị flag ở ảnh này nên bị loại.</p>
+  </section>`;
+}
+
+function drawFrameMarks(out, data) {
+  const rad = Math.max(6, data.size.width * 0.012), color = data.results[0]?.color || "#ff3b30";
+  (data.frames || []).forEach((f, i) => {
+    out.querySelector(`svg[data-frame="${i}"]`).innerHTML = f.defects.map((d) =>
+      `<circle class="${d.confirmed ? "real" : "noise"}" cx="${d.x}" cy="${d.y}" r="${rad}" stroke="${d.confirmed ? color : "#ff9f0a"}"/>`).join("");
+  });
 }
 
 // Phóng to vùng quanh điểm lỗi từ ảnh gốc (đủ độ phân giải). Trình duyệt không đọc được (vd TIFF) -> dùng ảnh thu nhỏ.

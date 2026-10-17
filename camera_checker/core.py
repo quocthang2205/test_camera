@@ -2,7 +2,7 @@
 # Phát hiện pixel lỗi (hot / dead / stuck / IR) từ chuỗi ảnh chụp cố định.
 # LUÔN đặt pattern trong ngoặc kép: python -m camera_checker hot "dark_*.png"
 # Giao diện web dùng chung lõi phân tích này: xem web_app.py
-import argparse, glob, json, math, sys
+import argparse, glob, json, math, os, sys
 import numpy as np, cv2
 from scipy.ndimage import median_filter, label, find_objects
 from . import analysis_params as params
@@ -11,6 +11,7 @@ from . import pdf_report
 
 # Mọi ngưỡng chỉnh được nằm trong analysis_params.SPEC và đi vào các hàm dưới dạng `p`.
 MIN_FRAMES = 5             # chuẩn: 5 ảnh mỗi bộ; ít hơn vẫn chạy được nhưng kém tin cậy
+FRAME_MARKS = 2000         # số điểm tối đa lưu/vẽ cho mỗi ảnh khi xem từng ảnh (tổng vẫn đếm đủ)
 COMPARE_TOL = 2            # compare: hai điểm cách nhau <= 2 px coi là cùng một điểm
 
 # Mỗi chế độ: các bộ ảnh cần (theo thứ tự), đọc xám hay màu, số ảnh tối thiểu mỗi bộ.
@@ -108,21 +109,34 @@ def pick_frames(stack, frames):
     return stack[:frames]
 
 
-def per_frame(stack, test, notes, p):
-    """Đếm số frame mỗi pixel bị flag; giữ pixel lỗi trong >= hit_pct % số frame."""
+def per_frame(stack, test, notes, p, frame_log=None):
+    """Đếm số frame mỗi pixel bị flag; giữ pixel lỗi trong >= hit_pct % số frame.
+    frame_log (list, tuỳ chọn): được thêm một dict cho mỗi ảnh gồm các điểm bị flag riêng ảnh đó;
+    điểm trùng với lỗi cuối cùng có confirmed=True, còn lại là nhiễu bị loại."""
     n = len(stack)
     if n < MIN_FRAMES:   # 1 ảnh không lọc được nhiễu ngẫu nhiên, chỉ dùng để kiểm nhanh
         notes.append(f"WARNING: chỉ phân tích {n} ảnh (chuẩn {MIN_FRAMES}): nhiễu ngẫu nhiên có thể bị tính là lỗi, "
                      f"cần chạy lại với {MIN_FRAMES} ảnh trước khi kết luận")
     min_hits = max(1, math.ceil(p.hit_pct / 100 * n))
     hits = np.zeros(stack.shape[1:3], np.int32)
+    masks = []
     for fr in stack:
         m = np.zeros(fr.shape[:2], bool)
         for ch in chans(fr):   # int16 tránh tràn uint8 khi cộng/so sánh
             m |= test(ch.astype(np.int16), med(ch, p.kernel).astype(np.int16))
         hits += m
+        if frame_log is not None:
+            masks.append(m)
     notes.append(f"{n} frame, ngưỡng {min_hits} frame")
-    return trim(hits >= min_hits, p.edge)
+    final = trim(hits >= min_hits, p.edge)
+    if frame_log is not None:
+        near = cv2.dilate(final.astype(np.uint8), np.ones((7, 7), np.uint8)) > 0   # dung sai vài px quanh lỗi thật
+        for m in masks:
+            ds = find_defects(trim(m, p.edge), p)
+            for d in ds:
+                d["confirmed"] = bool(near[d["y"], d["x"]])
+            frame_log.append(dict(total=len(ds), confirmed=sum(d["confirmed"] for d in ds), defects=ds[:FRAME_MARKS]))
+    return final
 
 
 def find_defects(mask, p):
@@ -188,17 +202,18 @@ def detect_ir(s1, s2, notes, p):
             "ir_hot": find_defects(trim(resp > p.ir_hot_ratio * mr, e), p)}
 
 
-def analyze(mode, stacks, p=None):
+def analyze(mode, stacks, p=None, frame_log=None):
     """Chạy một chế độ trên các stack ảnh (đúng thứ tự MODES[mode]['slots']); p = analysis_params (None = mặc định).
-    Trả về ({tên_kết_quả: [defect, ...]}, [ghi chú])."""
+    Trả về ({tên_kết_quả: [defect, ...]}, [ghi chú]).
+    frame_log: list rỗng để nhận điểm bị flag của từng ảnh (chỉ hot/dead; xem per_frame)."""
     p = p or params.defaults()
     notes = []
     if mode in ("hot", "dead"):
         notes.append(f"median ảnh = {check_level(stacks[0], mode, p):.0f} DN")
     if mode == "hot":
-        res = {"hot": find_defects(per_frame(stacks[0], lambda v, m: v > m + p.t_dev, notes, p), p)}
+        res = {"hot": find_defects(per_frame(stacks[0], lambda v, m: v > m + p.t_dev, notes, p, frame_log), p)}
     elif mode == "dead":
-        res = {"dead": find_defects(per_frame(stacks[0], lambda v, m: v < p.dead_pct / 100 * m, notes, p), p)}
+        res = {"dead": find_defects(per_frame(stacks[0], lambda v, m: v < p.dead_pct / 100 * m, notes, p, frame_log), p)}
     elif mode == "stuck":
         res = detect_stuck(stacks, p)
     elif mode == "ir":
@@ -274,10 +289,13 @@ def main():
         stacks = [load(getattr(a, s), cfg["gray"]) for s in cfg["slots"]]
         if cfg.get("frames"):
             stacks = [pick_frames(s, a.frames) for s in stacks]
-        results, notes = analyze(a.mode, stacks, p)
+        frame_log = []
+        results, notes = analyze(a.mode, stacks, p, frame_log)
     except (PixelCheckError, ValueError) as e:   # ValueError: thông số / điều kiện chụp nhập sai
         sys.exit(f"ERROR: {e}")
-    with open(sorted(glob.glob(getattr(a, cfg["slots"][0])))[0], "rb") as fp:   # EXIF lấy từ ảnh đầu bộ thứ nhất
+    files = sorted(glob.glob(getattr(a, cfg["slots"][0])))[:len(stacks[0])]   # đúng các ảnh pick_frames đã lấy
+    frames = [dict(name=os.path.basename(f), image=img, **log) for f, img, log in zip(files, stacks[0], frame_log)]
+    with open(files[0], "rb") as fp:   # EXIF lấy từ ảnh đầu bộ thứ nhất
         info = capture_info.build_info(fp.read(65536), stacks[0].shape[1:], len(stacks[0]), manual)
     print(capture_info.describe(info))
     for note in notes:
@@ -293,7 +311,7 @@ def main():
         H, W = stacks[0].shape[1:3]
         try:
             pdf = pdf_report.build_pdf(a.mode, info, vars(p), notes, list(results.items()), stacks[0][0],
-                                       (W, H), zone_box(W, H, p))
+                                       (W, H), zone_box(W, H, p), frames)
         except RuntimeError as e:   # thiếu font: vẫn giữ kết quả json, chỉ bỏ PDF
             return print(f"WARNING: không tạo được PDF: {e}")
         with open(f"{a.out}.pdf", "wb") as fp:
