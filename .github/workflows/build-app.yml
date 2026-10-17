@@ -1,12 +1,12 @@
 # Build bản chạy cho Linux, macOS, Windows và đăng lên GitHub Releases.
 # - Gắn tag v* (vd: git tag v1.0.0 && git push origin v1.0.0) -> build + tự tạo Release.
-# - Hoặc Actions > Run workflow, nhập "tag" (vd: v1.0.0) để build + tạo Release; để trống thì chỉ build.
+# - Hoặc Actions > Run workflow, nhập "tag" (vd: v1.0.0, KHÔNG có khoảng trắng) để build + tạo Release; để trống thì chỉ build.
 name: build-app
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag để phát hành Release (vd: v1.0.0). Để trống = chỉ build, không release"
+        description: "Tag phát hành (vd: v1.0.0, không dấu cách). Để trống = chỉ build, không release"
         required: false
         default: ""
   push:
@@ -41,23 +41,28 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || inputs.tag != ''
     runs-on: ubuntu-22.04
     steps:
-      - name: Xác định tag
+      - name: Xác định tag (tự đổi khoảng trắng thành dấu gạch ngang)
         id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-          fi
+          if [ "$REF_TYPE" = "tag" ]; then RAW="$GITHUB_REF_NAME"; else RAW="$INPUT_TAG"; fi
+          TAG="$(echo "$RAW" | sed -E 's/[[:space:]]+/-/g; s/[^A-Za-z0-9._-]//g')"
+          if [ -z "$TAG" ]; then echo "Tag không hợp lệ: '$RAW'"; exit 1; fi
+          echo "Dùng tag: $TAG"
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
       - name: Nén từng bản thành file .zip
+        env:
+          TAG: ${{ steps.tag.outputs.name }}
         run: |
           mkdir -p release
           for d in artifacts/*/; do
             n="$(basename "$d")"
-            (cd "$d" && zip -r -q "$GITHUB_WORKSPACE/release/$n-${{ steps.tag.outputs.name }}.zip" .)
+            (cd "$d" && zip -r -q "$GITHUB_WORKSPACE/release/$n-$TAG.zip" .)
           done
           ls -lh release
       - uses: softprops/action-gh-release@v2
