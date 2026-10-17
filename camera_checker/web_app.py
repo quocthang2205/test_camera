@@ -1,10 +1,9 @@
-"""Giao diện web cho camera_checker: kéo-thả ảnh vào trình duyệt để kiểm tra pixel lỗi.
+"""Máy chủ nội bộ phía sau cửa sổ ứng dụng (desktop_app.py): nhận ảnh, phân tích, trả kết quả và PDF.
 
-Chạy:  .venv/bin/python -m camera_checker.web_app          -> mở http://127.0.0.1:8000
-       .venv/bin/python -m camera_checker.web_app --lan    -> cho máy khác trong mạng LAN truy cập
+Không chạy độc lập và không mở cho trình duyệt: desktop_app chỉ phục vụ trên 127.0.0.1 cho cửa sổ của chính nó.
 Phân tích dùng chung lõi với CLI (core.analyze) nên kết quả giống hệt.
 """
-import argparse, base64, io, threading, webbrowser
+import base64, io
 from pathlib import Path
 
 import cv2
@@ -135,19 +134,3 @@ def report():
 def too_large(_):
     return jsonify(error="tổng dung lượng ảnh vượt quá 2 GB"), 413
 
-
-def main():
-    ap = argparse.ArgumentParser(description="Web kiểm tra pixel lỗi camera")
-    ap.add_argument("--port", type=int, default=8000)
-    ap.add_argument("--lan", action="store_true", help="mở cho máy khác trong mạng LAN (0.0.0.0)")
-    ap.add_argument("--no-browser", action="store_true", help="không tự mở trình duyệt")
-    a = ap.parse_args()
-    host = "0.0.0.0" if a.lan else "127.0.0.1"
-    if not a.no_browser:   # mở trình duyệt sau khi server kịp khởi động
-        threading.Timer(1.0, webbrowser.open, [f"http://127.0.0.1:{a.port}"]).start()
-    print(f"Mở trình duyệt: http://{'<IP-máy-này>' if a.lan else '127.0.0.1'}:{a.port}   (Ctrl+C để tắt)")
-    app.run(host=host, port=a.port, threaded=True)
-
-
-if __name__ == "__main__":
-    main()

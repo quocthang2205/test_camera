@@ -49,14 +49,14 @@ function makeSlot(slot) {
   const el = document.createElement("label");
   el.className = "drop"; el.dataset.slot = slot;
   el.innerHTML = `<span class="t">${esc(title)}</span><span class="hint">${esc(hint)}</span>
-    <div class="thumbs"></div><div class="count">Kéo thả hoặc bấm để chọn ảnh</div>
-    <button class="clear" title="Bỏ ảnh" hidden>×</button><input type="file" accept="image/*,.tif,.tiff" multiple>`;
+    <div class="thumbs"></div><div class="count">Kéo thả ảnh vào đây, hoặc bấm để thêm ảnh</div>
+    <button class="clear" title="Xoá hết ảnh trong ô" hidden>×</button><input type="file" accept="image/*,.tif,.tiff" multiple>`;
   const input = el.querySelector("input");
-  input.onchange = () => setFiles(slot, input.files);
+  input.onchange = () => { addFiles(slot, input.files); input.value = ""; };   // value rỗng: chọn lại cùng file vẫn nhận
   el.ondragover = (e) => { e.preventDefault(); e.stopPropagation(); el.classList.add("over"); };
   el.ondragleave = () => el.classList.remove("over");
-  el.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove("over"); hideVeil(); setFiles(slot, e.dataTransfer.files); };
-  el.querySelector(".clear").onclick = (e) => { e.preventDefault(); input.value = ""; setFiles(slot, []); };
+  el.ondrop = (e) => { e.preventDefault(); e.stopPropagation(); el.classList.remove("over"); hideVeil(); addFiles(slot, e.dataTransfer.files); };
+  el.querySelector(".clear").onclick = (e) => { e.preventDefault(); e.stopPropagation(); setFiles(slot, []); };
   return el;
 }
 
@@ -68,16 +68,22 @@ function setFiles(slot, list) {
   refresh();
 }
 
+// Thêm ảnh vào ô (không xoá ảnh đã có); trùng tên + dung lượng + ngày sửa thì bỏ qua
+function addFiles(slot, list) {
+  const key = (f) => `${f.name}|${f.size}|${f.lastModified}`, have = files[slot] || [], seen = new Set(have.map(key));
+  setFiles(slot, [...have, ...[...list].filter((f) => !seen.has(key(f)))]);
+}
+
 // Thả nhiều ảnh vào trang: một ô -> vào ô đó; nhiều ô -> xếp theo tên file chứa tên ô (dark_01.png -> dark)
 function routeFiles(list) {
   const slots = CFG.modes[mode].slots, imgs = [...list].filter((f) => IMG_RE.test(f.name) || f.type.startsWith("image/"));
-  if (slots.length === 1) return setFiles(slots[0], imgs);
+  if (slots.length === 1) return addFiles(slots[0], imgs);
   const buckets = {}, missed = [];
   imgs.forEach((f) => {
     const s = slots.find((s) => new RegExp(`(^|[^a-z0-9])${s}([^a-z]|$)`, "i").test(f.name));
     s ? (buckets[s] ||= []).push(f) : missed.push(f.name);
   });
-  Object.entries(buckets).forEach(([s, l]) => setFiles(s, l));
+  Object.entries(buckets).forEach(([s, l]) => addFiles(s, l));
   $("status").textContent = missed.length
     ? `${missed.length} ảnh không khớp tên ô nào (${missed.slice(0, 3).join(", ")}${missed.length > 3 ? "…" : ""}): thả trực tiếp vào ô.` : "";
 }
@@ -89,7 +95,7 @@ function refresh() {
   let ready = true;
   document.querySelectorAll(".drop").forEach((el) => {
     const slot = el.dataset.slot, n = (files[slot] || []).length, cnt = el.querySelector(".count");
-    cnt.textContent = !n ? "Kéo thả hoặc bấm để chọn ảnh" : n < min ? `${n} ảnh · thiếu ${min - n}`
+    cnt.textContent = !n ? "Kéo thả ảnh vào đây, hoặc bấm để thêm ảnh" : n < min ? `${n} ảnh · thiếu ${min - n}`
       : `✓ ${n} ảnh` + (CFG.modes[mode].frames && n > min ? ` · dùng ${min} ảnh đầu` : "");
     cnt.classList.toggle("miss", n > 0 && n < min);
     el.querySelector(".thumbs").innerHTML = (thumbs[slot] || []).map((u) => `<img src="${u}" alt="" onerror="this.remove()">`).join("")

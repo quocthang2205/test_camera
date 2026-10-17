@@ -1,6 +1,6 @@
 """Sinh báo cáo PDF cho một lần kiểm tra: điều kiện chụp, tổng hợp (kèm bảng theo từng ảnh), thông số, ảnh đánh dấu vị trí lỗi,
 lưới từng ảnh phân tích, danh sách điểm.
-Dùng chung cho dòng lệnh (core.py) và web (web_app.py). Cần font TTF có dấu tiếng Việt (DejaVu / Noto / Arial).
+Dùng chung cho dòng lệnh (core.py) và ứng dụng (web_app.py, desktop_app.py). Cần font TTF có dấu tiếng Việt (DejaVu / Noto / Arial).
 """
 from datetime import datetime
 from io import BytesIO

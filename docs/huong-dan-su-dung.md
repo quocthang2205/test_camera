@@ -1,7 +1,7 @@
 # Hướng dẫn sử dụng phần mềm Camera Checker
 
 Phần mềm kiểm tra **pixel lỗi** của camera từ bộ ảnh chụp cố định: pixel nóng (hot), pixel chết (dead),
-pixel kẹt (stuck) và lỗi camera nhiệt (IR). Kết quả xem trên trình duyệt và xuất ra báo cáo PDF / JSON / CSV.
+pixel kẹt (stuck) và lỗi camera nhiệt (IR). Kết quả xem ngay trong cửa sổ ứng dụng và xuất ra báo cáo PDF / JSON / CSV.
 
 ---
 
@@ -15,16 +15,14 @@ pixel kẹt (stuck) và lỗi camera nhiệt (IR). Kết quả xem trên trình 
 | macOS | `camera-checker` | Lần đầu: chuột phải > **Open**. Sau đó `./camera-checker` |
 | Windows | `camera-checker.exe` | Bấm đúp. Nếu SmartScreen cảnh báo: **More info > Run anyway** |
 
-Phần mềm mở trình duyệt tại <http://127.0.0.1:8000>. Cửa sổ terminal phải để mở trong lúc dùng; đóng terminal
-hoặc nhấn `Ctrl+C` để tắt. Lần mở đầu có thể chậm vài giây.
+Phần mềm là **ứng dụng desktop**: mở cửa sổ riêng, đóng cửa sổ là tắt (không cần trình duyệt, không cần terminal).
+Lần mở đầu có thể chậm vài giây vì app tự giải nén.
 
-Tuỳ chọn khi chạy:
-
-```bash
-camera-checker --port 9000      # đổi cổng nếu 8000 đang bận
-camera-checker --lan            # cho máy khác trong mạng LAN truy cập (http://<IP-máy>:8000)
-camera-checker --no-browser     # không tự mở trình duyệt
-```
+| Hệ điều hành | Thành phần hiển thị | Cần cài thêm |
+|---|---|---|
+| Windows 10/11 | WebView2 (có sẵn trên Windows 11; Windows 10 cài WebView2 Runtime của Microsoft) | Không |
+| macOS | WKWebView của hệ thống | Không |
+| Linux | Qt WebEngine (đóng gói sẵn trong app) | Không (cần màn hình đồ hoạ X11 hoặc Wayland) |
 
 ### Cách B: chạy từ mã nguồn
 
@@ -32,7 +30,7 @@ camera-checker --no-browser     # không tự mở trình duyệt
 cd ~/test_camera
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m camera_checker.web_app
+.venv/bin/python run_app.py        # mở cửa sổ ứng dụng
 ```
 
 Trên Windows thay `.venv/bin/` bằng `.venv\Scripts\`.
@@ -73,7 +71,7 @@ Một pixel chỉ được tính là **lỗi thật** khi bị flag ở **tất 
 Giao diện có 4 bước, làm từ trên xuống:
 
 1. **Chọn loại test**: Pixel nóng, Pixel chết, Pixel kẹt hoặc Camera nhiệt.
-2. **Thả ảnh**: kéo thả cả thư mục vào trang (ảnh tự vào đúng ô theo tên file), hoặc bấm vào từng ô để chọn.
+2. **Thêm ảnh**: kéo thả ảnh hoặc cả thư mục vào ô (thả ra ngoài ô thì ảnh tự vào đúng ô theo tên file), hoặc **bấm vào ô** để chọn thêm ảnh từ máy tính. Mỗi lần thả hoặc chọn là **thêm tiếp** vào ô, ảnh trùng bị bỏ qua; nút `×` góc ô xoá hết ảnh trong ô.
    Với hot và dead, chọn **Số ảnh phân tích**: `1 · kiểm nhanh`, `5 · chuẩn` hoặc `10 · kỹ`.
    Nếu thả nhiều ảnh hơn số đã chọn, phần mềm dùng các ảnh đầu theo thứ tự tên file.
 3. **Điều kiện chụp** (không bắt buộc): camera, serial, firmware, ISO, phơi sáng, bitrate, FPS, nhiệt độ,
@@ -187,7 +185,8 @@ Sinh bộ ảnh 4K có gắn sẵn lỗi (mỗi bộ hot và dead có 10 lỗi c
 
 | Hiện tượng | Cách xử lý |
 |---|---|
-| Không mở được trang / cổng bận | Chạy với `--port 9000` rồi mở <http://127.0.0.1:9000> |
+| Cửa sổ trắng hoặc không hiện (Windows) | Cài WebView2 Runtime của Microsoft |
+| Linux báo lỗi `xcb` / không mở được cửa sổ | Cần phiên đồ hoạ; nếu thiếu thư viện: `sudo apt install libxcb-cursor0` |
 | `chỉ có N ảnh, cần M` | Thả thêm ảnh hoặc chọn số ảnh nhỏ hơn. Với dòng lệnh, kiểm tra ngoặc kép quanh pattern |
 | `ảnh quá sáng cho test hot` | Đang dùng nhầm ảnh sáng; chụp lại ảnh tối, che kín ống kính |
 | `ảnh quá tối cho test dead` | Đang dùng nhầm ảnh tối; cần ảnh nền trắng đều |
@@ -196,6 +195,7 @@ Sinh bộ ảnh 4K có gắn sẵn lỗi (mỗi bộ hot và dead có 10 lỗi c
 | Không tạo được PDF | Báo lỗi hiện trên web; kết quả `.json` và `.csv` vẫn tải được |
 | macOS không cho mở | Chuột phải vào file > **Open** > **Open** |
 | Windows cảnh báo SmartScreen | **More info > Run anyway** |
-| Máy khác trong mạng không vào được | Chạy với `--lan` và mở cổng tường lửa tương ứng |
+
+Nút tải PDF / JSON / CSV trong cửa sổ ứng dụng sẽ hỏi nơi lưu file.
 
 Phần mềm không lưu ảnh trên máy chủ giữa các lần gọi. Tổng dung lượng ảnh mỗi lần phân tích tối đa 2 GB.

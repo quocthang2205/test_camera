@@ -1,7 +1,7 @@
 # camera_checker/core.py  —  pip install numpy opencv-python scipy
 # Phát hiện pixel lỗi (hot / dead / stuck / IR) từ chuỗi ảnh chụp cố định.
 # LUÔN đặt pattern trong ngoặc kép: python -m camera_checker hot "dark_*.png"
-# Giao diện web dùng chung lõi phân tích này: xem web_app.py
+# Ứng dụng desktop dùng chung lõi phân tích này: xem desktop_app.py / web_app.py
 import argparse, glob, json, math, os, sys
 import numpy as np, cv2
 from scipy.ndimage import median_filter, label, find_objects

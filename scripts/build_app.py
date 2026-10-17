@@ -20,6 +20,8 @@ def main():
         "--name", NAME,
         "--add-data", f"{ROOT / 'camera_checker' / 'web'}{sep}camera_checker/web",       # giao diện web
         "--add-data", f"{ROOT / 'camera_checker' / 'fonts'}{sep}camera_checker/fonts",   # font PDF có dấu tiếng Việt
+        "--collect-submodules", "webview",   # cửa sổ GUI (pywebview chọn backend theo hệ điều hành lúc chạy)
+        *(["--noconsole"] if sys.platform == "win32" else []),   # Windows: không hiện cửa sổ đen
         "--exclude-module", "tkinter", "--exclude-module", "matplotlib",
         "--distpath", str(ROOT / "dist"), "--workpath", str(ROOT / "build"), "--specpath", str(ROOT / "build"),
         str(ROOT / "run_app.py"),

@@ -106,15 +106,14 @@ Xem đủ tuỳ chọn: `.venv/bin/python -m camera_checker hot -h`
 Thông số khai báo một chỗ trong `camera_checker/analysis_params.py` (bảng `SPEC`): thêm một dòng ở đó là tự có cờ dòng lệnh
 và ô nhập trên web. File kết quả lưu cả thông số đã dùng (`params`); `compare` cảnh báo khi hai lần đo khác thông số.
 
-## Giao diện web
+## Ứng dụng (giao diện đồ hoạ)
 
 ```bash
-.venv/bin/python -m camera_checker.web_app          # mở http://127.0.0.1:8000
-.venv/bin/python -m camera_checker.web_app --lan    # cho máy khác trong mạng LAN truy cập
+.venv/bin/python run_app.py          # mở cửa sổ ứng dụng
 ```
 
-- Kéo thả cả thư mục ảnh vào trang: ảnh tự vào đúng ô theo tên file (`dark_01.png` -> ô Ảnh tối).
-- Cột phải: điều kiện chụp và thông số phân tích. Ô khác mặc định được tô màu. Giá trị được trình duyệt ghi nhớ.
+- Kéo thả ảnh vào ô, hoặc bấm vào ô để chọn ảnh từ máy; mỗi lần là thêm tiếp (ảnh trùng bị bỏ qua, nút `×` xoá hết). Thả cả thư mục ra ngoài ô: ảnh tự vào đúng ô theo tên file (`dark_01.png` -> ô Ảnh tối).
+- Cột phải: điều kiện chụp và thông số phân tích. Ô khác mặc định được tô màu. Giá trị được app ghi nhớ.
 - `Ctrl+Enter` để phân tích; có thanh tiến trình tải ảnh.
 - Kết quả: bật/tắt từng lớp đánh dấu, bấm vào điểm lỗi để phóng to từ ảnh gốc, lọc bảng theo kết quả/vùng/loại,
   tải `.json` (cùng định dạng với dòng lệnh) hoặc `.csv`.
@@ -155,7 +154,7 @@ PyInstaller không build chéo hệ điều hành: mỗi hệ điều hành buil
 ```bash
 pip install -r requirements-build.txt
 python scripts/build_app.py          # ra dist/camera-checker (Windows: dist\camera-checker.exe), ~120 MB, 1 file
-./dist/camera-checker                # mở trình duyệt tại http://127.0.0.1:8000 (--port, --lan, --no-browser như web_app)
+./dist/camera-checker                # mở cửa sổ ứng dụng
 ```
 
 Muốn có đủ 3 bản mà không cần 3 máy: đẩy repo lên GitHub, vào Actions > **build-app** > Run workflow
