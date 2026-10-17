@@ -5,6 +5,8 @@ __pycache__/
 
 # Kết quả đo và file tạm (sinh lại được bằng test_camera.py)
 *.json
+*.pdf
+*.csv
 *.bak
 
 # Ảnh test (dữ liệu lớn, không đưa lên repo)
@@ -15,6 +17,6 @@ __pycache__/
 *.tiff
 
 # Script cá nhân không thuộc dự án
-claude_share_to_markdown.py
+scripts/claude_share_to_markdown.py
 # ...trừ 5 ảnh mẫu (ảnh tối 4K) dùng để chạy thử
-!Test_*.jpeg
+!samples/Test_*.jpeg

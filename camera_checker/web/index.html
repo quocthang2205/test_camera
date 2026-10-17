@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kiểm tra pixel lỗi</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Kiểm tra pixel lỗi camera</h1>
+    <p class="sub">Chọn loại test → thả ảnh → kiểm tra thông số → <b>Phân tích</b> <kbd>Ctrl</kbd>+<kbd>Enter</kbd></p>
+  </div>
+</header>
+
+<div class="layout">
+  <main>
+    <section class="panel">
+      <h2><span class="step">1</span>Loại kiểm tra</h2>
+      <div class="modes" id="modes" role="radiogroup"></div>
+    </section>
+
+    <section class="panel">
+      <h2><span class="step">2</span>Ảnh chụp</h2>
+      <p class="hint" id="slot-hint">Kéo thả cả thư mục ảnh vào trang: ảnh tự vào đúng ô theo tên file (dark_, white_, red_ …).</p>
+      <div class="slots" id="slots"></div>
+      <div class="frames" id="frames-box">
+        <span>Số ảnh phân tích</span>
+        <div class="seg" id="frames">
+          <button data-v="1">1 · kiểm nhanh</button><button data-v="5" class="on">5 · chuẩn</button><button data-v="10">10 · kỹ</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="runbar">
+      <button class="primary" id="run" disabled>Phân tích</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div id="out"></div>
+  </main>
+
+  <aside>
+    <section class="panel">
+      <h2><span class="step">3</span>Điều kiện chụp</h2>
+      <p class="hint">Ghi vào file kết quả. Bỏ trống camera / ISO / phơi sáng = đọc từ EXIF.</p>
+      <div class="fields" id="fields"></div>
+      <button class="link" id="clear-fields">Xoá các ô</button>
+    </section>
+
+    <section class="panel">
+      <h2><span class="step">4</span>Thông số phân tích <span class="badge" id="changed-badge" hidden></span></h2>
+      <p class="hint">Chỉ hiện thông số mà loại test đang chọn có dùng. Ô tô màu = khác mặc định.</p>
+      <div id="params"></div>
+      <button class="link" id="reset-params">Khôi phục mặc định</button>
+    </section>
+  </aside>
+</div>
+
+<div class="drop-veil" id="veil"><div>Thả ảnh vào đây để tự xếp vào ô theo tên file</div></div>
+<script type="module" src="/static/app.js"></script>
+</body>
+</html>

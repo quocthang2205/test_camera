@@ -4,6 +4,8 @@
 - ISO / thời gian phơi sáng / hãng-model đọc từ EXIF nếu camera có ghi.
   ISO nhập tay (--iso) được ưu tiên hơn EXIF.
 - Bitrate là thông số của luồng video, ảnh JPEG không chứa -> chỉ nhập tay.
+- Các trường nhập tay khác (serial, firmware, FPS, nhiệt độ, người test, ghi chú) khai báo trong MANUAL_FIELDS;
+  camera / phơi sáng nhập tay ghi đè giá trị đọc từ EXIF.
 Bộ đọc EXIF viết thuần Python, không cần cài thêm thư viện.
 """
 import struct
@@ -18,6 +20,21 @@ RES_NAMES = {
 TAG_MAKE, TAG_MODEL, TAG_EXIF_IFD = 0x010F, 0x0110, 0x8769
 TAG_EXPOSURE, TAG_ISO = 0x829A, 0x8827
 TYPE_SIZE = {1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8}
+
+# Trường nhập tay: key, nhãn, ví dụ, kiểu. Thứ tự này là thứ tự hiển thị trên web / dòng mô tả.
+MANUAL_FIELDS = [
+    dict(key="camera", label="Camera", example="tự đọc EXIF", kind="text"),
+    dict(key="serial", label="Số serial", example="vd: SN-000123", kind="text"),
+    dict(key="firmware", label="Firmware", example="vd: v1.2.3", kind="text"),
+    dict(key="iso", label="ISO", example="tự đọc EXIF", kind="int"),
+    dict(key="exposure", label="Phơi sáng", example="vd: 1/60 s", kind="text"),
+    dict(key="bitrate", label="Bitrate", example="vd: 50Mbps", kind="text"),
+    dict(key="fps", label="FPS", example="vd: 30", kind="number"),
+    dict(key="temperature", label="Nhiệt độ môi trường", example="vd: 25°C", kind="text"),
+    dict(key="tester", label="Người test", example="vd: Thắng", kind="text"),
+    dict(key="note", label="Ghi chú", example="vd: lần đo sau burn-in 24h", kind="text"),
+]
+MAX_TEXT = 200
 
 
 def resolution_label(width, height):
@@ -71,21 +88,42 @@ def read_exif(blob):
     return out
 
 
-def build_info(first_blob, shape, frames, iso=None, bitrate=None):
-    """Gom điều kiện chụp của một bộ ảnh. shape = (H, W[, C]) của ảnh."""
+def clean_manual(raw):
+    """Chuẩn hoá các trường nhập tay; bỏ trống thì bỏ qua. Sai kiểu -> ValueError."""
+    out = {}
+    for f in MANUAL_FIELDS:
+        val = str(raw.get(f["key"]) or "").strip()[:MAX_TEXT]
+        if not val:
+            continue
+        if f["kind"] == "int":
+            if not val.isdigit():
+                raise ValueError(f"{f['label']} phải là số nguyên, nhận được '{val}'")
+            val = int(val)
+        elif f["kind"] == "number":
+            try:
+                val = float(val)
+            except ValueError:
+                raise ValueError(f"{f['label']} phải là số, nhận được '{val}'")
+            val = int(val) if val.is_integer() else val
+        out[f["key"]] = val
+    return out
+
+
+def build_info(first_blob, shape, frames, manual=None):
+    """Gom điều kiện chụp của một bộ ảnh. shape = (H, W[, C]); manual = kết quả clean_manual()."""
     height, width = shape[:2]
-    exif = read_exif(first_blob)
+    exif, manual = read_exif(first_blob), manual or {}
     info = dict(resolution=f"{width}x{height}", resolution_name=resolution_label(width, height), frames=frames)
-    if "camera" in exif:
-        info["camera"] = exif["camera"]
-    if iso:
-        info["iso"], info["iso_source"] = int(iso), "nhập tay"
+    for key in ("camera", "exposure"):   # nhập tay ghi đè EXIF
+        if manual.get(key) or exif.get(key):
+            info[key] = manual.get(key) or exif[key]
+    if "iso" in manual:
+        info["iso"], info["iso_source"] = manual["iso"], "nhập tay"
     elif "iso" in exif:
         info["iso"], info["iso_source"] = exif["iso"], "EXIF"
-    if "exposure" in exif:
-        info["exposure"] = exif["exposure"]
-    if bitrate:
-        info["bitrate"] = str(bitrate).strip()
+    for f in MANUAL_FIELDS:
+        if f["key"] not in info and f["key"] in manual:
+            info[f["key"]] = manual[f["key"]]
     return info
 
 
@@ -94,8 +132,14 @@ def describe(info):
     parts = [f"độ phân giải {info['resolution_name']}", f"{info['frames']} ảnh"]
     if "camera" in info:
         parts.insert(0, info["camera"])
+    for key, fmt in (("serial", "SN {}"), ("firmware", "FW {}")):
+        if key in info:
+            parts.append(fmt.format(info[key]))
     parts.append(f"ISO {info['iso']} ({info['iso_source']})" if "iso" in info else "ISO: chưa có (dùng --iso)")
     if "exposure" in info:
         parts.append(f"phơi sáng {info['exposure']}")
     parts.append(f"bitrate {info['bitrate']}" if "bitrate" in info else "bitrate: chưa nhập (dùng --bitrate)")
+    for key, fmt in (("fps", "{} fps"), ("temperature", "nhiệt độ {}"), ("tester", "người test {}"), ("note", "ghi chú: {}")):
+        if key in info:
+            parts.append(fmt.format(info[key]))
     return " · ".join(parts)
